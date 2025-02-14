@@ -1,0 +1,42 @@
+{
+  "pluginAlias": "LinakDeskGroup",
+  "pluginType": "platform",
+  "singular": true,
+  "strictValidation": false,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "required": true,
+        "default": "Desk Control"
+      },
+      "pollingRate": {
+        "title": "Polling timeout",
+        "type": "number",
+        "required": true,
+        "default": 20,
+        "minimum": 10
+      },
+      "sLinakServerBasePath": {
+        "title": "Base path to s-linak web server",
+        "type": "string",
+        "required": true,
+        "default": "http://127.0.0.1/s-linak/v1"
+      },
+      "sLinakServerUsername": {
+        "title": "Username for web server autorisation",
+        "type": "string",
+        "required": true,
+        "default": "guest"
+      },
+      "sLinakServerPassword": {
+        "title": "Password for web server authorisation",
+        "type": "string",
+        "required": true,
+        "default": "swordfish"
+      }
+    }
+  }
+}

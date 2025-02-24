@@ -2,14 +2,14 @@ import type { API, Characteristic, DynamicPlatformPlugin, Logging, PlatformAcces
 
 import { DeskGroupAccessory } from './platformAccessory.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
-// import * as http from 'node:http';
+
 import bent from 'bent';
 
 
 // import { http, configParser, pullTimer } from 'homebridge-http-base';
 
 
-/* This is only required when using Custom Services and Characteristics not support by HomeKit
+/* This is only required when using Custom Services and Characteristics not supported by HomeKit
 import { EveHomeKitTypes } from 'homebridge-lib/EveHomeKitTypes';
 */
 
@@ -26,7 +26,7 @@ export class DeskGroupPlatform implements DynamicPlatformPlugin {
   public readonly accessories: Map<string, PlatformAccessory> = new Map();
   public readonly discoveredCacheUUIDs: string[] = [];
 
-  /* This is only required when using Custom Services and Characteristics not support by HomeKit
+  /* This is only required when using Custom Services and Characteristics not supported by HomeKit
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public readonly CustomServices: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -55,6 +55,11 @@ export class DeskGroupPlatform implements DynamicPlatformPlugin {
     // If we don't have any HTTP server configured, we're done here.
     if(!config.sLinakServerBasePath) {
       this.log.error('No desk group server path has been configured.');
+      return;
+    }
+
+    if (config.maxHeight < config.baseHeight) {
+      this.log.error('The max height must be higher than the base height.');
       return;
     }
 
@@ -91,8 +96,12 @@ export class DeskGroupPlatform implements DynamicPlatformPlugin {
    */
   async discoverDevices() {
     // Query REST API for devices
-    const deskGroups = await this.GetGroups();
-
+    let deskGroups = await this.GetGroups();
+    if (this.config.addIndividualDesks) {
+      const desks = await this.GetDesks();
+      deskGroups = [...deskGroups, ...desks];
+    }
+    
     // EXAMPLE ONLY
     // A real plugin you would discover accessories from the local network, cloud services
     /* or a user-defined array in the platform config.
@@ -114,7 +123,8 @@ export class DeskGroupPlatform implements DynamicPlatformPlugin {
     ];
     */
     // loop over the discovered devices and register each one if it has not already been registered
-    console.log(deskGroups);
+    console.debug('************ DISCOVERED GROUPS ************');
+    console.debug(deskGroups);
     // console.log(myVal);
     for (const group of deskGroups) {
       // generate a unique id for the accessory this should be generated from
@@ -126,7 +136,7 @@ export class DeskGroupPlatform implements DynamicPlatformPlugin {
       // the cached devices we stored in the `configureAccessory` method above
       const existingAccessory = this.accessories.get(uuid);
 
-      console.log(group);
+      console.debug(group);
       if (existingAccessory) {
         // the accessory already exists
         this.log.info('Restoring existing accessory from cache:', existingAccessory.displayName);
@@ -190,16 +200,16 @@ export class DeskGroupPlatform implements DynamicPlatformPlugin {
 
     for (const group_id in groupData) {
       const group_members: string[] = groupData[group_id];
-      console.log(group_id);  // "office"
-      console.log(group_members);  // array of desk_id
+      console.debug(group_id);  // "office"
+      console.debug(group_members);  // array of desk_id
 
       const deskGroup = new DeskGroup(group_id, group_id, groupData[group_id]);
 
       // Query for info on desks in group
       for (const desk_id of group_members) {
-        console.log(desk_id);
+        console.debug(desk_id);
         const deskData = await getJSON(this.config.sLinakServerBasePath + '/desks/' + desk_id, '', headers);
-        console.log(deskData);
+        console.debug(deskData);
         deskGroup.desks.push(deskData);
       }
       
@@ -207,6 +217,25 @@ export class DeskGroupPlatform implements DynamicPlatformPlugin {
     }
 
     return deskGroups;
+  }
+
+  async GetDesks(): Promise<Desk[]> {
+    const desks: Desk[] = [];
+
+    const basic_auth_string = Buffer.from(this.config.username + ':' + this.config.password).toString('base64');
+    const headers = {
+      'Authorization': 'Basic ' + basic_auth_string,
+    };
+
+    const getJSON = bent('json');
+    const response = await getJSON(this.config.sLinakServerBasePath + '/desks', '', headers);
+    // forEach (const desk_id in desks.entries) {
+    for (let i = 0; i < response.length; i++) {
+      const desk = new Desk(response[i].id, response[i].config_name, response[i].height, response[i].base_height);
+      desks.push(desk);
+    }
+
+    return desks;
   }
 }
 
@@ -218,11 +247,32 @@ export class DeskGroup {
     public readonly id: string,
     public readonly name: string,
     public readonly mac_ids: string[],
-    // public readonly config: PlatformConfig,
-    // public readonly api: API,
+    public readonly desk_type: DeskGroupType = DeskGroupType.Group,
   ) {
     this.id = id;
     this.name = name;
     this.mac_ids = mac_ids;
+    this.desk_type = desk_type;
   }
-} 
+}
+
+export class Desk extends DeskGroup {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  public desk: any;
+
+  constructor(
+    public readonly id: string,
+    public readonly config_name: string,
+    public readonly height: number,
+    public readonly base_height: number,
+  ) {
+    super(id, config_name, [], DeskGroupType.Individual);
+    this.height = height;
+    this.base_height = base_height;
+  }
+}
+
+export enum DeskGroupType {
+  Group,
+  Individual
+}

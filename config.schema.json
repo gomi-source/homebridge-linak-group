@@ -12,12 +12,30 @@
         "required": true,
         "default": "Desk Control"
       },
+      "addIndividualDesks": {
+        "title": "Add individual desks as blinds (if not, only groups will be added to Homekit)",
+        "type": "boolean",
+        "required": false,
+        "default": false
+      },
       "pollingRate": {
         "title": "Polling timeout",
         "type": "number",
         "required": true,
         "default": 20,
         "minimum": 10
+      },
+      "baseHeight": {
+        "title": "Override the base height (lowest possible desk position, used as value for blinds fully closed)",
+        "type": "number",
+        "required": false,
+        "minimum": 0
+      },
+      "maxHeight": {
+        "title": "Max height (highest possible desk position, used as value for blinds fully open)",
+        "type": "number",
+        "required": false,
+        "minimum": 0
       },
       "sLinakServerBasePath": {
         "title": "Base path to s-linak web server",

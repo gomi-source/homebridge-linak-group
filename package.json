@@ -2,7 +2,7 @@
   "name": "homebridge-linak-group",
   "displayName": "Linak Desk",
   "type": "module",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "This plugin exposes desks (or groups of desks) as Blinds in Homekit, and controls them through an HTTP server middleware.",
   "author": "gomi-source",

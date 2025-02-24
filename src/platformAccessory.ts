@@ -1,8 +1,8 @@
 import bent from 'bent';
 
-import type { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
+import { type CharacteristicValue, type PlatformAccessory, type Service } from 'homebridge';
 
-import type { DeskGroupPlatform } from './platform.js';
+import  { DeskGroupType, type DeskGroupPlatform } from './platform.js';
 
 
 /**
@@ -12,7 +12,11 @@ import type { DeskGroupPlatform } from './platform.js';
  */
 export class DeskGroupAccessory {
   private service: Service;
-  private currentPos = 40;
+
+  private deskStates = {
+    CurrentPosition: 0,
+    TargetPosition: 0,
+  };
 
   private requestedPosTimer: string | number | NodeJS.Timeout | undefined;
 
@@ -29,19 +33,14 @@ export class DeskGroupAccessory {
 
     // get the LightBulb service if it exists, otherwise create a new LightBulb service
     // you can create multiple services for each accessory
-    this.service = this.accessory.getService(this.platform.Service.WindowCovering)
-      || this.accessory.addService(this.platform.Service.WindowCovering);
+    this.service = this.accessory.getService(this.platform.Service.WindowCovering) || this.accessory.addService(this.platform.Service.WindowCovering);
 
     // set the service name, this is what is displayed as the default name on the Home app
     // in this example we are using the name we stored in the `accessory.context` in the `discoverDevices` method.
     this.service.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name);
 
-    // Initialize our state as stopped.
-    this.service.setCharacteristic(this.platform.Characteristic.PositionState, this.platform.Characteristic.PositionState.STOPPED);
-
     // each service must implement at-minimum the "required characteristics" for the given service type
-    // see https://developers.homebridge.io/#/service/Lightbulb
-    // create handlers for required characteristics
+    // see https://developers.homebridge.io/#/service/WindowCovering
 
     this.service.getCharacteristic(this.platform.Characteristic.CurrentPosition)
       .onGet(this.getCurrentPosition.bind(this));
@@ -53,28 +52,68 @@ export class DeskGroupAccessory {
       .onGet(this.getTargetPosition.bind(this))
       .onSet(this.setTargetPosition.bind(this));
 
+    // Initialize our state as stopped.
+    // this.service.setCharacteristic(this.platform.Characteristic.PositionState, this.platform.Characteristic.PositionState.STOPPED);
+    //this.service.getCharacteristic(this.platform.Characteristic.PositionState)
+    //  .updateValue(this.platform.Characteristic.PositionState.STOPPED);
+
+    /**
+     * Creating multiple services of the same type.
+     *
+     * To avoid "Cannot add a Service with the same UUID another Service without also defining a unique 'subtype' property." error,
+     * when creating multiple services of the same type, you need to use the following syntax to specify a name and subtype id:
+     * this.accessory.getService('NAME') || this.accessory.addService(this.platform.Service.Lightbulb, 'NAME', 'USER_DEFINED_SUBTYPE_ID');
+     *
+     * The USER_DEFINED_SUBTYPE must be unique to the platform accessory (if you platform exposes multiple accessories, each accessory
+     * can use the same subtype id.)
+     */
+
 
     this.platform.log.debug('configuring desk: ', this.accessory.context.device);
   }
 
-  // Percentage to height (easy!)
-  // Height = "min" + ("percentage" / 100) * ("max" - "min")
-  // height to percentage (a bit more tricky, but solvable)
-  // Percentage = (100 * "height") / ("max" - "min") - (100 * "min") / ("max" - "min")
-
   PercentageToHeight(percentage: number) {
-    return Math.round(percentage / 100 * 660 + 540);
+    percentage = percentage > 100 ? 100 : percentage < 0 ? 0 : percentage;
+    const baseHeight = this.GetBaseHeightAndMovementRange().baseHeight;
+    const movementRange = this.GetBaseHeightAndMovementRange().movementRange;
+
+    return Math.round(percentage / 100 * movementRange + baseHeight);
   }
 
   HeightToPercentage(height: number) {
-    return Math.round((height - 540) / 660 * 100);
+    const baseHeight = this.GetBaseHeightAndMovementRange().baseHeight;
+    const movementRange = this.GetBaseHeightAndMovementRange().movementRange;
+
+    let calculatedPercentage = Math.round((height - baseHeight) / movementRange * 100);
+    calculatedPercentage = calculatedPercentage > 100 ? 100 : calculatedPercentage < 0 ? 0 : calculatedPercentage;
+    return calculatedPercentage;
+  }
+
+  GetBaseHeightAndMovementRange() {
+    let baseHeight = 540;
+    let movementRange = 660;
+
+    if (this.platform.config.baseHeight > 0) {
+      baseHeight = this.platform.config.baseHeight;
+    }
+
+    if (this.platform.config.maxHeight > 0) {
+      movementRange = this.platform.config.maxHeight - this.platform.config.baseHeight;
+    }
+
+    return {
+      baseHeight: baseHeight,
+      movementRange: movementRange,
+    };
   }
 
   async moveToPercent(percentage: number) {
     const newHeight = this.PercentageToHeight(percentage);
 
     // Move by HTTP command
-    const url = this.platform.config.sLinakServerBasePath + '/groups/' + this.accessory.context.device.id + '/height';    
+    const deskGroupType = this.accessory.context.device.desk_type === DeskGroupType.Group ? '/groups/' : '/desks/';
+
+    const url = this.platform.config.sLinakServerBasePath + deskGroupType + this.accessory.context.device.id + '/height';
     const basic_auth_string = Buffer.from(this.platform.config.username + ':' + this.platform.config.password).toString('base64');
     const headers = {
       'Authorization': 'Basic ' + basic_auth_string,
@@ -83,19 +122,28 @@ export class DeskGroupAccessory {
     const postJSON = bent('POST', 202);
     await postJSON(url, newHeight.toString(), headers);
 
-    this.currentPos = percentage;
-    this.service.getCharacteristic(this.platform.Characteristic.CurrentPosition).updateValue(this.currentPos);
-    this.service.getCharacteristic(this.platform.Characteristic.TargetPosition).updateValue(this.currentPos);
+    // Check if move is done by calling a GET endpoint (which is queued by the HTTP server)
+    const deskId = this.accessory.context.device.desk_type === DeskGroupType.Group 
+      ? this.accessory.context.device.desks[0].id 
+      : this.accessory.context.device.id;
+    const getUrl = this.platform.config.sLinakServerBasePath + '/desks/' + deskId + '/height';    
+    const getJSON = bent('GET', 'json');
+    await getJSON(getUrl, '', headers);
+
+    this.deskStates.CurrentPosition = percentage;
+    this.service.getCharacteristic(this.platform.Characteristic.CurrentPosition).updateValue(this.deskStates.CurrentPosition);
 
     this.service.getCharacteristic(this.platform.Characteristic.PositionState)
       .updateValue(this.platform.Characteristic.PositionState.STOPPED);
+
+    this.platform.log.debug('Move finished to: ', percentage);
   }
 
 
-  // HomeKit setter & getters
-  // TargetPosition get & set
-  // CurrentPosition get
-  // PositionState get
+  /**
+   * Handle "SET" requests from HomeKit
+   * These are sent when the user changes the state of an accessory, for example, turning on a Light bulb.
+   */
 
   /**
    * Handle requests to set the "Target Position" characteristic
@@ -103,11 +151,14 @@ export class DeskGroupAccessory {
   async setTargetPosition(value: CharacteristicValue) {
     this.platform.log.debug('Triggered SET TargetPosition:', value);
 
+    this.deskStates.TargetPosition = value as number;
+    this.service.getCharacteristic(this.platform.Characteristic.TargetPosition).updateValue(this.deskStates.TargetPosition);
+
     clearTimeout(this.requestedPosTimer);
     this.requestedPosTimer = setTimeout(() => {
       this.platform.log.debug('executing move to: ', value);
 
-      const moveUp = value as number > this.currentPos;
+      const moveUp = value as number > this.deskStates.TargetPosition;
       const positionState = moveUp ? this.platform.Characteristic.PositionState.INCREASING
         : this.platform.Characteristic.PositionState.DECREASING;
 
@@ -116,15 +167,33 @@ export class DeskGroupAccessory {
 
       setTimeout(() => this.moveToPercent(value as number), 100);
 
-    }, 1500);
+    }, 500);
   }
+
+  /**
+   * Handle the "GET" requests from HomeKit
+   * These are sent when HomeKit wants to know the current state of the accessory, for example, checking if a Light bulb is on.
+   *
+   * GET requests should return as fast as possible. A long delay here will result in
+   * HomeKit being unresponsive and a bad user experience in general.
+   *
+   * If your device takes time to respond you should update the status of your device
+   * asynchronously instead using the `updateCharacteristic` method instead.
+   * In this case, you may decide not to implement `onGet` handlers, which may speed up
+   * the responsiveness of your device in the Home app.
+
+   * @example
+   * this.service.updateCharacteristic(this.platform.Characteristic.On, true)
+   */
 
   /**
    * Handle requests to get the current value of the "Target Position" characteristic
    */
   async getTargetPosition(): Promise<CharacteristicValue> {
     this.platform.log.debug('Triggered GET TargetPosition');
-    return this.currentPos;
+    this.platform.log.debug(this.deskStates.TargetPosition.toString());
+    
+    return this.deskStates.TargetPosition;
   }
 
   /**
@@ -134,7 +203,12 @@ export class DeskGroupAccessory {
     this.platform.log.debug('Triggered GET PositionState');
 
     // set this to a valid value for PositionState
-    return this.platform.Characteristic.PositionState.STOPPED;
+    const moveUp = this.deskStates.CurrentPosition > this.deskStates.TargetPosition;
+    return moveUp 
+      ? this.platform.Characteristic.PositionState.INCREASING
+      : this.deskStates.CurrentPosition < this.deskStates.TargetPosition 
+        ? this.platform.Characteristic.PositionState.DECREASING 
+        : this.platform.Characteristic.PositionState.STOPPED;
   }
 
   /**
@@ -145,17 +219,28 @@ export class DeskGroupAccessory {
     // setTimeout(() => this.poll(), 100);
 
     // Get height from HTTP server
-    const url = this.platform.config.sLinakServerBasePath + '/desks/' + this.accessory.context.device.desks[0].id + '/height';    
+    const deskId = this.accessory.context.device.desk_type === DeskGroupType.Group 
+      ? this.accessory.context.device.desks[0].id
+      : this.accessory.context.device.id;
+    const url = this.platform.config.sLinakServerBasePath + '/desks/' + deskId + '/height';    
     const basic_auth_string = Buffer.from(this.platform.config.username + ':' + this.platform.config.password).toString('base64');
     const headers = {
       'Authorization': 'Basic ' + basic_auth_string,
     };
-  
-    const get = bent('json');
+
+    const get = bent('GET', 'json');
     const response = await get(url, '', headers);
 
-    this.currentPos = this.HeightToPercentage(response as number);  
-    return this.currentPos;
+    this.deskStates.CurrentPosition = this.HeightToPercentage(response as number);
+    // This the desk can be moved outside of homekit, TargetPosition has to be updated to match:
+    this.deskStates.TargetPosition = this.deskStates.CurrentPosition;
+    this.service.updateCharacteristic(this.platform.Characteristic.TargetPosition, this.deskStates.TargetPosition);
+    
+    // if you need to return an error to show the device as "Not Responding" in the Home app:
+    // throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    this.platform.log.debug(this.deskStates.CurrentPosition.toString());
+
+    return this.deskStates.CurrentPosition;
   }
 }
 

@@ -1,19 +1,19 @@
 {
   "name": "homebridge-linak-group",
-  "displayName": "Linak Desk",
+  "displayName": "Linak Desk Group",
   "type": "module",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "description": "This plugin exposes desks (or groups of desks) as Blinds in Homekit, and controls them through an HTTP server middleware.",
   "author": "gomi-source",
   "license": "Apache-2.0",
-  "homepage": "https://gitlab.com/supersoma/services/system/s-linak-v1",
+  "homepage": "https://github.com/gomi-source/homebridge-linak-group",
   "repository": {
     "type": "git",
-    "url": "https://gitlab.com/supersoma/services/system/s-linak-v1.git"
+    "url": "https://github.com/gomi-source/homebridge-linak-group.git"
   },
   "bugs": {
-    "url": "https://gitlab.com/supersoma/services/system/s-linak-v1/-/issues"
+    "url": "https://github.com/gomi-source/homebridge-linak-group/issues"
   },
   "keywords": [
     "homebridge-plugin"

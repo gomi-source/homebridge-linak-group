@@ -10,7 +10,7 @@
   "homepage": "https://github.com/gomi-source/homebridge-linak-group",
   "repository": {
     "type": "git",
-    "url": "https://github.com/gomi-source/homebridge-linak-group.git"
+    "url": "git+https://github.com/gomi-source/homebridge-linak-group.git"
   },
   "bugs": {
     "url": "https://github.com/gomi-source/homebridge-linak-group/issues"

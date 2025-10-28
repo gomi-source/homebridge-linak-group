@@ -1,17 +1,90 @@
 {
-  "pluginAlias": "ExampleHomebridgePlugin",
+  "pluginAlias": "LinakDeskGroup",
   "pluginType": "platform",
   "singular": true,
   "strictValidation": false,
   "schema": {
     "type": "object",
-    "required": ["name"],
-    "additionalProperties": false,
     "properties": {
       "name": {
         "title": "Name",
         "type": "string",
-        "default": "Example Dynamic Platform"
+        "required": true,
+        "default": "Desk Control"
+      },
+      "addIndividualDesks": {
+        "title": "Add individual desks as blinds (if not, only groups will be added to Homekit)",
+        "type": "boolean",
+        "required": false,
+        "default": false
+      },
+      "pollingRate": {
+        "title": "Polling timeout",
+        "type": "number",
+        "required": true,
+        "default": 20,
+        "minimum": 10
+      },
+      "baseHeight": {
+        "title": "Override the base height (lowest possible desk position, used as value for blinds fully closed)",
+        "type": "number",
+        "required": false,
+        "minimum": 0
+      },
+      "maxHeight": {
+        "title": "Max height (highest possible desk position, used as value for blinds fully open)",
+        "type": "number",
+        "required": false,
+        "minimum": 0
+      },
+      "sLinakServerBasePath": {
+        "title": "Base path to s-linak web server",
+        "type": "string",
+        "required": true,
+        "default": "http://127.0.0.1/s-linak/v1"
+      },
+      "sLinakServerUsername": {
+        "title": "Username for web server autorisation",
+        "type": "string",
+        "required": true,
+        "default": "guest"
+      },
+      "sLinakServerPassword": {
+        "title": "Password for web server authorisation",
+        "type": "string",
+        "required": true,
+        "default": "swordfish"
+      },
+      "mqtt": {
+        "title": "MQTT",
+        "type": "object",
+        "properties": {
+          "host": {
+            "title": "Host",
+            "type": "string",
+            "required": true,
+            "default": "localhost"
+          },
+          "port": {
+            "title": "Port",
+            "type": "number",
+            "required": true,
+            "default": 1883
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          },
+          "password": {
+            "title": "Password",
+            "type": "string"
+          },
+          "topicBase": {
+            "title": "Topic Prefix",
+            "type": "string",
+            "default": "tele/control/linak"
+          }
+        }
       }
     }
   }

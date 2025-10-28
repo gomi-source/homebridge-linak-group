@@ -1,19 +1,19 @@
 {
-  "name": "homebridge-plugin-name",
-  "displayName": "Plugin Name",
+  "name": "homebridge-linak-group",
+  "displayName": "Linak Desk Group",
   "type": "module",
-  "version": "1.0.0",
-  "private": true,
-  "description": "A short description about what your plugin does.",
-  "author": "Your Name",
+  "version": "0.3.2",
+  "private": false,
+  "description": "This plugin exposes desks (or groups of desks) as Blinds in Homekit, and controls them through an HTTP server middleware.",
+  "author": "gomi-source",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/USERNAME/GITHUB_PROJECT_NAME#readme",
+  "homepage": "https://github.com/gomi-source/homebridge-linak-group#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/USERNAME/GITHUB_PROJECT_NAME.git"
+    "url": "git+https://github.com/gomi-source/homebridge-linak-group.git"
   },
   "bugs": {
-    "url": "https://github.com/USERNAME/GITHUB_PROJECT_NAME/issues"
+    "url": "https://github.com/gomi-source/homebridge-linak-group/issues"
   },
   "keywords": [
     "homebridge-plugin"
@@ -30,10 +30,13 @@
     "watch": "npm run build && npm link && nodemon"
   },
   "dependencies": {
-    "homebridge-lib": "^7.1.8"
+    "bent": "^7.3.12",
+    "homebridge-lib": "^7.1.8",
+    "mqtt": "^5.14.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
+    "@types/bent": "^7.3.8",
     "@types/node": "^24.5.2",
     "eslint": "^9.36.0",
     "homebridge": "^2.0.0-beta.30",

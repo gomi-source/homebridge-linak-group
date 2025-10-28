@@ -17,8 +17,8 @@ export class DeskGroupAccessory {
   private mqtt: MqttClient;
 
   private deskStates = {
-    CurrentPosition: 0,
-    TargetPosition: 0,
+    CurrentPosition: 50,
+    TargetPosition: 50,
   };
 
   private readonly topics: {
@@ -65,6 +65,9 @@ export class DeskGroupAccessory {
       case this.topics.height:
         this.deskStates.CurrentPosition = this.HeightToPercentage(parseFloat(payload));
         this.service.updateCharacteristic(this.platform.Characteristic.CurrentPosition, this.deskStates.CurrentPosition);
+        // We have to update TargetPosition, or the desk will be in state Opening or Closing
+        this.deskStates.TargetPosition = this.deskStates.CurrentPosition;
+        this.service.updateCharacteristic(this.platform.Characteristic.TargetPosition, this.deskStates.TargetPosition);
         this.platform.log.debug(`Updating characteristic CurrentPosition: ${this.deskStates.CurrentPosition}`);
         break;
       }
@@ -198,19 +201,19 @@ export class DeskGroupAccessory {
     const postJSON = bent('POST', 202);
     await postJSON(url, newHeight.toString(), headers);
 
-    // Check if move is done by calling a GET endpoint (which is queued by the HTTP server)
+    // Check if move is done by calling a GET endpoint (which is queued by the HTTP server until move is done)
     const deskId = this.accessory.context.device.desk_type === DeskGroupType.Group 
       ? this.accessory.context.device.desks[0].id 
       : this.accessory.context.device.id;
-    const getUrl = this.platform.config.sLinakServerBasePath + '/desks/' + deskId + '/height';    
+    const getUrl = this.platform.config.sLinakServerBasePath + '/desks/' + deskId;
     const getJSON = bent('GET', 'json');
     await getJSON(getUrl, '', headers);
 
     this.deskStates.CurrentPosition = percentage;
-    this.service.getCharacteristic(this.platform.Characteristic.CurrentPosition).updateValue(this.deskStates.CurrentPosition);
-
-    this.service.getCharacteristic(this.platform.Characteristic.PositionState)
-      .updateValue(this.platform.Characteristic.PositionState.STOPPED);
+    this.deskStates.TargetPosition = this.deskStates.CurrentPosition;
+    this.service.updateCharacteristic(this.platform.Characteristic.CurrentPosition, this.deskStates.CurrentPosition);
+    this.service.updateCharacteristic(this.platform.Characteristic.TargetPosition, this.deskStates.TargetPosition);
+    this.service.updateCharacteristic(this.platform.Characteristic.PositionState, this.platform.Characteristic.PositionState.STOPPED);
 
     this.platform.log.debug('Move finished to: ', percentage);
   }
@@ -234,7 +237,7 @@ export class DeskGroupAccessory {
     this.platform.log.debug('Triggered SET TargetPosition:', value);
 
     this.deskStates.TargetPosition = value as number;
-    this.service.getCharacteristic(this.platform.Characteristic.TargetPosition).updateValue(this.deskStates.TargetPosition);
+    this.service.updateCharacteristic(this.platform.Characteristic.TargetPosition, this.deskStates.TargetPosition);
 
     clearTimeout(this.requestedPosTimer);
     this.requestedPosTimer = setTimeout(() => {
@@ -245,7 +248,7 @@ export class DeskGroupAccessory {
         : this.platform.Characteristic.PositionState.DECREASING;
 
       // Tell HomeKit we're on the move.
-      this.service.getCharacteristic(this.platform.Characteristic.PositionState).updateValue(positionState);
+      this.service.updateCharacteristic(this.platform.Characteristic.PositionState, positionState);
 
       setTimeout(() => this.moveToPercent(value as number), 100);
 
@@ -282,9 +285,7 @@ export class DeskGroupAccessory {
    * Handle requests to get the current value of the "Target Position" characteristic
    */
   async getTargetPosition(): Promise<CharacteristicValue> {
-    this.platform.log.debug('Triggered GET TargetPosition');
-    this.platform.log.debug(this.deskStates.TargetPosition.toString());
-    
+    this.platform.log.debug('Triggered GET TargetPosition', this.deskStates.TargetPosition.toString());
     return this.deskStates.TargetPosition;
   }
 
@@ -293,6 +294,8 @@ export class DeskGroupAccessory {
    */
   async getPositionState(): Promise<CharacteristicValue> {
     this.platform.log.debug('Triggered GET PositionState');
+
+    return this.platform.Characteristic.PositionState.STOPPED;
 
     // set this to a valid value for PositionState
     const moveUp = this.deskStates.CurrentPosition > this.deskStates.TargetPosition;
@@ -323,14 +326,14 @@ export class DeskGroupAccessory {
     const response = await get(url, '', headers);
 
     this.deskStates.CurrentPosition = this.HeightToPercentage(response as number);
-    // This the desk can be moved outside of homekit, TargetPosition has to be updated to match:
-    // this.deskStates.TargetPosition = this.deskStates.CurrentPosition;
-    // this.service.updateCharacteristic(this.platform.Characteristic.TargetPosition, this.deskStates.TargetPosition);
+    // This the desk can be moved outside of homekit, TargetPosition has to be updated to match or it will be stuck in state Opening or Closing
+    this.deskStates.TargetPosition = this.deskStates.CurrentPosition;
+    this.service.updateCharacteristic(this.platform.Characteristic.TargetPosition, this.deskStates.TargetPosition);
     
     // if you need to return an error to show the device as "Not Responding" in the Home app:
     // throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
-    this.platform.log.debug(this.deskStates.CurrentPosition.toString());
 
+    this.platform.log.debug('Returned CurrentPosition ', this.deskStates.CurrentPosition.toString());
     return this.deskStates.CurrentPosition;
   }
 }
